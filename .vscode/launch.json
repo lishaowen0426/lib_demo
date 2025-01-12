@@ -1,0 +1,12 @@
+{
+    "configurations": [
+        {
+            "type": "cppdbg",
+            "request": "launch",
+            "name": "Launch",
+            "program": "/home/swli/rust-isolation/lib_demo/svf-test/build/Svftest",
+            "args": [],
+            "cwd": "/home/swli/rust-isolation/lib_demo/svf-test/build"
+        }
+    ]
+}

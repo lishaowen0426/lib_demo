@@ -1,0 +1,8 @@
+[build]
+rustflags=["-Zunstable-options","-Zlinker-verbose","-Csave-temps","-Clinker-plugin-lto=no", "-Clink-arg=-fuse-ld=/home/swli/rust-isolation/mold/build/mold", "-Clink-arg=-Wl,--verbose"]
+
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+
+[env]
+TMPDIR = "/home/swli/rust-isolation/lib_demo/tmp"

@@ -1,0 +1,8 @@
+[build]
+rustflags=["-Zunstable-options","-Copt-level=0","-Zunsafe_heap=false","-Zprint_unsafe_locals=false","-Zref_prop","-Zmaintain_storage_marker","-Zlinker-verbose","-Zthir-unsafeck=true","-Zmimalloc=/home/swli/rust-isolation/mimalloc/out/debug/mimalloc-debug.o","-Csave-temps","-Clinker-plugin-lto=no", "-Clink-arg=-fuse-ld=/home/swli/rust-isolation/mold/build/mold", "-Clink-arg=-Wl,--verbose", "-Ccodegen-units=1"]
+
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+
+[env]
+TMPDIR = "/home/swli/rust-isolation/lib_demo/tmp"

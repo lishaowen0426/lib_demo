@@ -1,0 +1,9 @@
+/target
+/target-mold
+/tmp
+/tmp-mold
+/rustc
+/raw
+/rustc-ice*
+
+/svf-test/build

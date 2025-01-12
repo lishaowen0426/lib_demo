@@ -1,0 +1,15 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "/home/swli/rust-isolation/rust/build/host/llvm/include",
+                "/home/swli/rust-isolation/rust/src/SVF/svf/include",
+                "/home/swli/rust-isolation/rust/src/SVF/svf-llvm/include",
+                "/home/swli/rust-isolation/rust/src/SVF/Debug-build/include/"
+            ],
+            "compileCommands": "/home/swli/rust-isolation/lib_demo/svf-test/build/compile_commands.json"
+        }
+    ],
+    "version": 4
+}
