@@ -14,34 +14,12 @@ define void @memory_ops() {
 entry:
 
 
-  %struct_ptr = alloca { i32, i32* }, align 8
-  
-  ; Get a pointer to the second element of the struct (a pointer to i32)
-  %gep = getelementptr { i32, i32* }, { i32, i32* }* %struct_ptr, i32 0, i32 1
-
+  %struct_ptr = alloca { i32, ptr }, align 8
+  %gep = getelementptr { i32, ptr }, ptr %struct_ptr, i32 0, i32 1
   %int_ptr = alloca i32, align 4
   %int_val = alloca ptr, align 4
-  store i32* %int_ptr, i32** %gep, align 8
+  store ptr %int_ptr, ptr %gep, align 8, !svf !6
   store ptr %int_ptr, ptr %int_val, align 4
-
-
-; Step 1: Create a struct with an i32 and a pointer to i32
-  %struct = alloca { i32, i32* }, align 8
-
-  ; Step 2: Initialize the struct
-  %int = alloca i32, align 4
-  store i32 0, i32* %int, align 4          ; Initialize the pointer with 0
-  %struct_val = insertvalue { i32, i32* } undef, i32 42, 0 ; Insert 42 at index 0
-  %struct_val1 = insertvalue { i32, i32* } %struct_val, i32* %int, 1 ; Insert pointer
-
-  store { i32, i32* } %struct_val1, { i32, i32* }* %struct, align 8 ; Store struct
-
-  ; Step 3: Extract the pointer to i32 (2nd element of the struct)
-  %loaded_struct = load { i32, i32* }, { i32, i32* }* %struct, align 8
-  %extracted_ptr = extractvalue { i32, i32* } %loaded_struct, 1
-
-  ; Step 4: Store a constant 4 into the extracted pointer
-  store i32 4, i32* %extracted_ptr, align 4 , !svf !6
 
   
   ; Return

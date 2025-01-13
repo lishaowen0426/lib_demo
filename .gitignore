@@ -5,5 +5,5 @@
 /rustc
 /raw
 /rustc-ice*
-
+/home/swli/rust-isolation/lib_demo/svf-test/opt
 /svf-test/build

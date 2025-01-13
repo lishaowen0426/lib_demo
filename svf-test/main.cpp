@@ -21,7 +21,7 @@ using namespace SVF;
 // static std::string LLVM_SVF_INPUT =
 //     "/home/swli/rust-isolation/lib_demo/lib_demo.svf.ll";
 static std::string LLVM_SVF_INPUT =
-    "/home/swli/rust-isolation/lib_demo/svf-test/test.ll";
+    "/home/swli/rust-isolation/lib_demo/svf-test/test.replace.ll";
 
 typedef struct {
   const Value *dest;
@@ -58,6 +58,7 @@ class SvfTainter {
 private:
   std::vector<TaintSource> taintSources;
   std::set<const AllocaInst *> alloca_to_replace;
+  std::set<const SVFStmt *> visited;
   Module *M;
   LLVMModuleSet *mSet;
   SVFIR *pag;
@@ -69,6 +70,7 @@ private:
                       FIFOWorkList<const VFGNode *> &worklist);
 
   void processDestVal(const Value *dest);
+  void processEdge(const SVFStmt *e, bool forward);
 
 public:
   SvfTainter(Module *M) : M(M) {
@@ -129,19 +131,17 @@ void SvfTainter::processIRForTaintSource(Instruction &I) {
   if (auto *allocaInst = dyn_cast<AllocaInst>(&I)) {
     taintSources.push_back(TaintSource{allocaInst, {}});
   } else if (auto *storeInst = dyn_cast<StoreInst>(&I)) {
-    taintSources.push_back(TaintSource{storeInst->getPointerOperand(),
-                                       {storeInst->getValueOperand()}});
+    taintSources.push_back(TaintSource{storeInst->getPointerOperand(), {}});
 
   } else if (auto *atomicrmwInst = dyn_cast<AtomicRMWInst>(&I)) {
-    taintSources.push_back(TaintSource{atomicrmwInst->getPointerOperand(),
-                                       {atomicrmwInst->getValOperand()}});
+    taintSources.push_back(TaintSource{atomicrmwInst->getPointerOperand(), {}});
   } else if (auto *cmpxchgInst = dyn_cast<AtomicCmpXchgInst>(&I)) {
-    taintSources.push_back(TaintSource{cmpxchgInst->getPointerOperand(),
-                                       {cmpxchgInst->getNewValOperand()}});
+    taintSources.push_back(TaintSource{cmpxchgInst->getPointerOperand(), {}});
   } else if (auto *insertValueInst = dyn_cast<InsertValueInst>(&I)) {
     taintSources.push_back(
-        TaintSource{insertValueInst->getAggregateOperand(),
-                    {insertValueInst->getInsertedValueOperand()}});
+        TaintSource{insertValueInst->getAggregateOperand(), {}});
+  } else if (auto *insertElemInst = dyn_cast<InsertElementInst>(&I)) {
+    taintSources.push_back(TaintSource{insertElemInst->getOperand(0), {}});
   } else if (auto *callInst = dyn_cast<CallInst>(&I)) {
     std::vector<const Value *> args;
     for (unsigned i = 0; i < callInst->arg_size(); ++i) {
@@ -156,31 +156,78 @@ void SvfTainter::processIRForTaintSource(Instruction &I) {
   }
 }
 
+void SvfTainter::processEdge(const SVFStmt *e, bool forward) {
+  if (visited.find(e) == visited.end()) {
+    visited.insert(e);
+    auto *node = forward ? e->getDstNode() : e->getSrcNode();
+    std::cout << "node: " << *node << "\n";
+    if (node->hasValue()) {
+      processDestVal(mSet->getLLVMValue(node->getValue()));
+    }
+  } else {
+    std::cout << "edge: " << *e << " has been visited\n";
+  }
+}
+
 void SvfTainter::processDestVal(const Value *dest) {
+  outs() << "dest llvm value: " << *dest << "\n";
   SVFValue *svfval = mSet->getSVFValue(dest);
   std::cout << "dest svf value: " << *svfval << "\n";
   if (pag->hasValueNode(svfval)) {
     PAGNode *current = pag->getGNode(pag->getValueNode(svfval));
-    if (auto *allocaInst =
-            dyn_cast<AllocaInst>(mSet->getLLVMValue(current->getValue()))) {
-      alloca_to_replace.insert(allocaInst);
-      return;
-    } else if (auto extracInst = dyn_cast<ExtractValueInst>(
-                   mSet->getLLVMValue(current->getValue()))) {
-      return processDestVal(extracInst->getAggregateOperand());
-    } else {
-      for (auto e : current->getInEdges()) {
-        if (auto s = dyn_cast<GepStmt>(e)) {
-          auto *srcNode = e->getSrcNode();
-          auto srcIR = mSet->getLLVMValue(srcNode->getValue());
-          processDestVal(srcIR);
-        } else if (auto s = dyn_cast<LoadStmt>(e)) {
+    if (current->hasValue()) {
+      if (auto *allocaInst =
+              dyn_cast<AllocaInst>(mSet->getLLVMValue(current->getValue()))) {
+        alloca_to_replace.insert(allocaInst);
+
+        for (auto e : current->getOutEdges()) {
+          std::cout << "alloca out edge: " << *e << "\n";
+          processEdge(e, true);
+        }
+
+        return;
+      } else if (auto extracInst = dyn_cast<ExtractValueInst>(
+                     mSet->getLLVMValue(current->getValue()))) {
+        return processDestVal(extracInst->getAggregateOperand());
+      } else if (auto insertInst = dyn_cast<InsertValueInst>(
+                     mSet->getLLVMValue(current->getValue()))) {
+
+        return processDestVal(insertInst->getAggregateOperand());
+      } else if (auto insertElemInst = dyn_cast<InsertElementInst>(
+                     mSet->getLLVMValue(current->getValue()))) {
+        return processDestVal(insertElemInst->getOperand(0));
+      } else if (auto extractElemInst = dyn_cast<ExtractElementInst>(
+                     mSet->getLLVMValue(current->getValue()))) {
+        return processDestVal(extractElemInst->getOperand(0));
+      }
+    }
+
+    for (auto e : current->getInEdges()) {
+      std::cout << "edge: " << *e << "\n";
+      processEdge(e, false);
+      /*
+      if (auto s = dyn_cast<GepStmt>(e)) {
+        auto *srcNode = e->getSrcNode();
+        auto srcIR = mSet->getLLVMValue(srcNode->getValue());
+        processDestVal(srcIR);
+      } else if (auto s = dyn_cast<LoadStmt>(e)) {
+        auto *srcNode = e->getSrcNode();
+        auto srcIR = mSet->getLLVMValue(srcNode->getValue());
+        processDestVal(srcIR);
+      } else if (auto s = dyn_cast<CopyStmt>(e)) {
+        if (s->isInt2Ptr() || s->isPtr2Int()) {
           auto *srcNode = e->getSrcNode();
           auto srcIR = mSet->getLLVMValue(srcNode->getValue());
           processDestVal(srcIR);
         }
+      } else if (auto s = dyn_cast<BinaryOPStmt>(e)) {
+        auto *srcNode = e->getSrcNode();
+        auto srcIR = mSet->getLLVMValue(srcNode->getValue());
+        processDestVal(srcIR);
       }
+      */
     }
+
   } else {
     std::cerr << "SVF value: " << *svfval << " has no pag node\n";
     abort();
@@ -193,10 +240,12 @@ void SvfTainter::propagateTaint() {
 
     const Value *dest = src.dest;
     if (dest != nullptr) {
+      outs() << "dest llvm value: " << *dest << "\n";
       processDestVal(dest);
     }
 
-    for (auto *op : src.val) {
+    for (auto arg : src.val) {
+      processDestVal(arg);
     }
   }
 }
